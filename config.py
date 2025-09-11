@@ -39,7 +39,8 @@ class DatabaseConfig:
 class BacktestConfig:
     """Inställningar för backtesting-strategin."""
     INITIAL_CAPITAL = 100000
-    BROKERAGE_FEE = 0.01
+    BROKERAGE_FIXED_FEE = 69.0
+    BROKERAGE_PERCENTAGE = 0.00069
 
 
 # Konfiguration för API-nycklar (exempel för framtida behov)

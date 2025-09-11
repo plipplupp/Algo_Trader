@@ -8,7 +8,15 @@ import numpy as np
 import math
 from config import DatabaseConfig
 
-def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brokerage_fee=0.01):
+def calculate_brokerage_fee(transaction_cost, fixed_fee, percentage_fee):
+    """
+    Beräknar courtageavgiften baserat på transaktionskostnaden.
+    Använder en tiered-modell: minst en fast avgift eller en procentuell avgift av kostnaden.
+    """
+    calculated_percentage_fee = transaction_cost * percentage_fee
+    return max(fixed_fee, calculated_percentage_fee)
+
+def run_portfolio_backtest(tickers, optimal_params, initial_capital, brokerage_fixed_fee, brokerage_percentage):
     """
     Kör backtesting för en hel portfölj av aktier med de optimala parametrarna.
     Allokerar kapital dynamiskt baserat på modellens köpsignaler.
@@ -20,6 +28,8 @@ def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brok
         
         all_data = []
         train_test_split_dates = {}
+        total_brokerage_fees = 0.0  # Ny variabel för totala avgifter
+        total_transactions = 0      # Ny räknare för transaktioner
 
         # 1. Ladda data och träna modeller för varje ticker
         print("--- Laddar data och tränar modeller för varje aktie ---")
@@ -102,17 +112,25 @@ def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brok
                 current_price = ticker_day_data['adj_close'].iloc[0]
                 purchase_price = pos['purchase_price']
                 
+                # Beräkna säljavgiften dynamiskt
+                sell_cost = pos['shares'] * current_price
+                sell_fee = calculate_brokerage_fee(sell_cost, brokerage_fixed_fee, brokerage_percentage)
+
                 # Stop-loss
                 if current_price <= purchase_price * (1 - 0.05): # 5% stop-loss
                     profit_loss = (current_price - purchase_price) * pos['shares']
-                    current_capital += (pos['shares'] * current_price) - brokerage_fee
+                    current_capital += sell_cost - sell_fee
+                    total_brokerage_fees += sell_fee  # Addera avgiften
+                    total_transactions += 1 # Inkrementera transaktionsräknaren
                     print(f"Stop-loss: sålde {ticker} på {date.date()} för {current_price:.2f} kr. Vinst/förlust: {profit_loss:.2f} kr")
                     tickers_to_sell.append(ticker)
                 
                 # Sälj-signal från modellen
                 elif ticker_day_data['prediction'].iloc[0] == 'Sälj':
                     profit_loss = (current_price - purchase_price) * pos['shares']
-                    current_capital += (pos['shares'] * current_price) - brokerage_fee
+                    current_capital += sell_cost - sell_fee
+                    total_brokerage_fees += sell_fee  # Addera avgiften
+                    total_transactions += 1 # Inkrementera transaktionsräknaren
                     print(f"Sälj-signal: sålde {ticker} på {date.date()} för {current_price:.2f} kr. Vinst/förlust: {profit_loss:.2f} kr")
                     tickers_to_sell.append(ticker)
 
@@ -123,7 +141,7 @@ def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brok
             buy_signals = day_data[day_data['prediction'] == 'Köp']
             if not buy_signals.empty and current_capital > 0:
                 # Justera denna variabel för att ändra hur stor del av det tillgängliga kapitalet som ska allokeras per signal
-                fraction_per_signal = 0.75 
+                fraction_per_signal = 0.95
                 fraction_of_capital = 1 / len(buy_signals) * fraction_per_signal
                 
                 for _, row in buy_signals.iterrows():
@@ -131,15 +149,37 @@ def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brok
                     price = row['adj_close']
                     
                     if ticker not in positions and current_capital > 0:
-                        investment_capital = current_capital * fraction_of_capital
-                        
-                        shares_to_buy = math.floor((investment_capital - brokerage_fee) / price)
-                        
-                        if shares_to_buy > 0:
-                            cost = shares_to_buy * price + brokerage_fee
-                            positions[ticker] = {'shares': shares_to_buy, 'purchase_price': price}
-                            current_capital -= cost
-                            print(f"Köp-signal: köpte {shares_to_buy} st {ticker} på {date.date()} för {price:.2f} kr")
+                      investment_capital = current_capital * fraction_of_capital
+                      
+                      # Starta med det teoretiska max-antalet aktier
+                      shares_to_buy = math.floor(investment_capital / price)
+                      
+                      # Iterera nedåt tills den totala kostnaden (inklusive courtage) ryms
+                      while shares_to_buy > 0:
+                          buy_cost_no_fee = shares_to_buy * price
+                          buy_fee = calculate_brokerage_fee(buy_cost_no_fee, brokerage_fixed_fee, brokerage_percentage)
+                          total_cost = buy_cost_no_fee + buy_fee
+                          
+                          if total_cost <= investment_capital:
+                              # Vi har hittat ett antal aktier som fungerar, avbryt loopen
+                              break
+                          
+                          # Om kostnaden är för hög, minska med en aktie och försök igen
+                          shares_to_buy -= 1
+
+                      if shares_to_buy > 0:
+                          # Nu vet vi att total_cost (från loopen) är korrekt och ryms inom budgeten
+                          cost = total_cost
+                          positions[ticker] = {'shares': shares_to_buy, 'purchase_price': price}
+                          current_capital -= cost
+                          total_brokerage_fees += buy_fee  # Addera avgiften
+                          total_transactions += 1 # Inkrementera transaktionsräknaren
+                          print(f"Köp-signal: köpte {shares_to_buy} st {ticker} på {date.date()} för {price:.2f} kr")
+                      # Om shares_to_buy är 0 efter loopen, var inte ens en aktie + courtage möjlig
+                      # Då kan vi antingen skriva ut ett meddelande eller bara låta bli att handla tyst.
+                      elif investment_capital > 0: # Skriv bara ut om det faktiskt fanns ett försök
+                           print(f"** Courtageblockering för {ticker} på {date.date()}: Inte ens en aktie kunde köpas inom budgeten ({investment_capital:.2f} kr). **")            
+
             
             # Uppdatera det dagliga kapitalet (summan av kontanter och aktievärde)
             total_portfolio_value = current_capital
@@ -158,13 +198,15 @@ def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brok
             if not last_price_df.empty:
                 last_price = last_price_df['adj_close'].iloc[-1]
                 final_capital += pos['shares'] * last_price
-            
+        
         profit = final_capital - initial_capital
         
         print("\n--- Slutresultat ---")
         print(f"Initialt kapital: {initial_capital:.2f} kr")
         print(f"Slutkapital med portföljstrategi: {final_capital:.2f} kr")
         print(f"Total vinst/förlust: {profit:.2f} kr ({ (profit / initial_capital) * 100:.2f}%)")
+        print(f"Total courtageavgift: {total_brokerage_fees:.2f} kr")
+        print(f"Totalt antal transaktioner: {total_transactions}")
 
         # Jämförelse med "Köp och Behåll" för hela portföljen
         buy_and_hold_profit, buy_and_hold_capital = calculate_portfolio_buy_and_hold(portfolio_df, initial_capital, tickers)

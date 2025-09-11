@@ -9,7 +9,10 @@ def main():
     """
     tickers = DataConfig.TICKERS
     initial_capital = BacktestConfig.INITIAL_CAPITAL
-    brokerage_fee = BacktestConfig.BROKERAGE_FEE
+    
+    # Hämta de nya variablerna för courtageavgiften från config.py
+    brokerage_fixed_fee = BacktestConfig.BROKERAGE_FIXED_FEE
+    brokerage_percentage = BacktestConfig.BROKERAGE_PERCENTAGE
 
     # 1. Samla in och förbered data för alla tickers
     run_data_pipeline(tickers)
@@ -25,8 +28,8 @@ def main():
         'TSLA': {'days': 10, 'threshold': 0.02}
     }
     
-    # 3. Kör den nya portfölj-backtestern
-    run_portfolio_backtest(tickers, optimal_params, initial_capital, brokerage_fee)
+    # 3. Kör den nya portfölj-backtestern och skicka med de nya avgiftsvärdena
+    run_portfolio_backtest(tickers, optimal_params, initial_capital, brokerage_fixed_fee, brokerage_percentage)
 
 if __name__ == "__main__":
     main()
