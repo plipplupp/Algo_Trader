@@ -141,7 +141,7 @@ def run_portfolio_backtest(tickers, optimal_params, initial_capital, brokerage_f
             buy_signals = day_data[day_data['prediction'] == 'Köp']
             if not buy_signals.empty and current_capital > 0:
                 # Justera denna variabel för att ändra hur stor del av det tillgängliga kapitalet som ska allokeras per signal
-                fraction_per_signal = 0.95
+                fraction_per_signal = 1
                 fraction_of_capital = 1 / len(buy_signals) * fraction_per_signal
                 
                 for _, row in buy_signals.iterrows():
