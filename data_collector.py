@@ -33,7 +33,8 @@ def run_data_pipeline(tickers):
                 max_date_db = pd.read_sql_query(query, conn).iloc[0, 0]
                 
                 if max_date_db:
-                    # Använder rätt formatsträng för att matcha datumet
+                    # Fixat: Tar bort tiden från datumsträngen för att undvika fel
+                    max_date_db = str(max_date_db).split(' ')[0]
                     start_date_obj = datetime.strptime(max_date_db, '%Y-%m-%d')
                     start_date_new = (start_date_obj + timedelta(days=1)).strftime('%Y-%m-%d')
                     
