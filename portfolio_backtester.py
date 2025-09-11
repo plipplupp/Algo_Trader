@@ -5,6 +5,7 @@ from sklearn.metrics import classification_report
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 import numpy as np
+import math
 from config import DatabaseConfig
 
 def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brokerage_fee=0.01):
@@ -93,7 +94,12 @@ def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brok
             # Stäng positioner baserat på 'Sälj' eller stop-loss
             tickers_to_sell = []
             for ticker, pos in list(positions.items()):
-                current_price = day_data[day_data['ticker'] == ticker]['adj_close'].iloc[0]
+                # Kontrollera att data för tickern existerar för den aktuella dagen
+                ticker_day_data = day_data[day_data['ticker'] == ticker]
+                if ticker_day_data.empty:
+                    continue # Hoppa över om ingen data finns för denna dag
+
+                current_price = ticker_day_data['adj_close'].iloc[0]
                 purchase_price = pos['purchase_price']
                 
                 # Stop-loss
@@ -104,7 +110,7 @@ def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brok
                     tickers_to_sell.append(ticker)
                 
                 # Sälj-signal från modellen
-                elif day_data[day_data['ticker'] == ticker]['prediction'].iloc[0] == 'Sälj':
+                elif ticker_day_data['prediction'].iloc[0] == 'Sälj':
                     profit_loss = (current_price - purchase_price) * pos['shares']
                     current_capital += (pos['shares'] * current_price) - brokerage_fee
                     print(f"Sälj-signal: sålde {ticker} på {date.date()} för {current_price:.2f} kr. Vinst/förlust: {profit_loss:.2f} kr")
@@ -116,30 +122,42 @@ def run_portfolio_backtest(tickers, optimal_params, initial_capital=100000, brok
             # Öppna nya positioner baserat på 'Köp'
             buy_signals = day_data[day_data['prediction'] == 'Köp']
             if not buy_signals.empty and current_capital > 0:
-                available_capital = current_capital / len(buy_signals)
+                # Justera denna variabel för att ändra hur stor del av det tillgängliga kapitalet som ska allokeras per signal
+                fraction_per_signal = 0.75 
+                fraction_of_capital = 1 / len(buy_signals) * fraction_per_signal
                 
                 for _, row in buy_signals.iterrows():
                     ticker = row['ticker']
                     price = row['adj_close']
                     
-                    if ticker not in positions and available_capital > 0:
-                        shares_to_buy = (available_capital - brokerage_fee) / price
-                        positions[ticker] = {'shares': shares_to_buy, 'purchase_price': price}
-                        current_capital -= shares_to_buy * price + brokerage_fee
-                        print(f"Köp-signal: köpte {shares_to_buy:.2f} st {ticker} på {date.date()} för {price:.2f} kr")
+                    if ticker not in positions and current_capital > 0:
+                        investment_capital = current_capital * fraction_of_capital
+                        
+                        shares_to_buy = math.floor((investment_capital - brokerage_fee) / price)
+                        
+                        if shares_to_buy > 0:
+                            cost = shares_to_buy * price + brokerage_fee
+                            positions[ticker] = {'shares': shares_to_buy, 'purchase_price': price}
+                            current_capital -= cost
+                            print(f"Köp-signal: köpte {shares_to_buy} st {ticker} på {date.date()} för {price:.2f} kr")
             
             # Uppdatera det dagliga kapitalet (summan av kontanter och aktievärde)
             total_portfolio_value = current_capital
-            for pos in positions.values():
-                total_portfolio_value += pos['shares'] * portfolio_df[portfolio_df['date'] == date]['adj_close'].iloc[0]
+            for ticker, pos in positions.items():
+                ticker_day_data = day_data[day_data['ticker'] == ticker]
+                if not ticker_day_data.empty:
+                    last_price = ticker_day_data['adj_close'].iloc[0]
+                    total_portfolio_value += pos['shares'] * last_price
             
             daily_capital.append({'date': date, 'capital': total_portfolio_value})
 
         # Slutlig summering
         final_capital = current_capital
-        for pos in positions.values():
-            last_price = portfolio_df[portfolio_df['ticker'] == list(positions.keys())[0]]['adj_close'].iloc[-1]
-            final_capital += pos['shares'] * last_price
+        for ticker, pos in positions.items():
+            last_price_df = portfolio_df[portfolio_df['ticker'] == ticker]
+            if not last_price_df.empty:
+                last_price = last_price_df['adj_close'].iloc[-1]
+                final_capital += pos['shares'] * last_price
             
         profit = final_capital - initial_capital
         

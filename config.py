@@ -1,6 +1,5 @@
-# config.py
-
 import os
+from datetime import datetime
 
 # Funktion för att läsa in tickers från en fil
 def load_tickers_from_file(filename):
@@ -25,6 +24,8 @@ def load_tickers_from_file(filename):
 class DataConfig:
     """Inställningar för att hämta aktiedata."""
     TICKERS = load_tickers_from_file("tickers.txt")
+    START_DATE = "2020-01-01"
+    END_DATE = datetime.now().strftime('%Y-%m-%d')
 
 
 # Konfiguration för databasen
@@ -32,6 +33,13 @@ class DatabaseConfig:
     """Inställningar för databasanslutningen."""
     # Uppdaterat namn på databasfilen
     DB_NAME = "stock_data.db"
+
+
+# Konfiguration för backtesting
+class BacktestConfig:
+    """Inställningar för backtesting-strategin."""
+    INITIAL_CAPITAL = 100000
+    BROKERAGE_FEE = 0.01
 
 
 # Konfiguration för API-nycklar (exempel för framtida behov)
