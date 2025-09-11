@@ -42,6 +42,18 @@ class BacktestConfig:
     BROKERAGE_FIXED_FEE = 69.0
     BROKERAGE_PERCENTAGE = 0.00069
 
+# Konfiguration för optimala parametrar för varje ticker
+class OptimalParamsConfig:
+    """Optimala parametrar för varje ticker."""    
+    OPTIMAL_PARAMS = {
+        'AAPL': {'days': 5, 'threshold': 0.03},
+        'GOOGL': {'days': 5, 'threshold': 0.03},
+        'MSFT': {'days': 5, 'threshold': 0.03},
+        'NVDA': {'days': 10, 'threshold': 0.04},
+        'SWED-A.ST': {'days': 15, 'threshold': 0.04},
+        'TSLA': {'days': 10, 'threshold': 0.02}
+    }
+    
 
 # Konfiguration för API-nycklar (exempel för framtida behov)
 class ApiConfig:
