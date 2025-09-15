@@ -1,22 +1,22 @@
 {
     "AZN.ST": {
-        "days": 5,
-        "threshold": 0.03
-    },
-    "HM-B.ST": {
         "days": 3,
         "threshold": 0.04
     },
-    "INVE-B.ST": {
+    "HM-B.ST": {
         "days": 3,
-        "threshold": 0.03
+        "threshold": 0.02
+    },
+    "INVE-B.ST": {
+        "days": 15,
+        "threshold": 0.04
     },
     "VOLV-B.ST": {
-        "days": 5,
+        "days": 3,
         "threshold": 0.02
     },
     "SWED-A.ST": {
-        "days": 10,
+        "days": 3,
         "threshold": 0.03
     }
 }
